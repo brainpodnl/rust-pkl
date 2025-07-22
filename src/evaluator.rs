@@ -1,7 +1,9 @@
 use std::io::Cursor;
 
+use tracing::instrument;
+
 use crate::{
-    client::{CreateEvaluatorRequest, EvaluateRequest, Project},
+    client::{CreateEvaluatorRequest, EvaluateRequest, Project, Uri},
     decoder::Decoder,
     errors::{Error, PklError},
     protocol::Protocol,
@@ -46,19 +48,23 @@ impl Evaluator {
         request_id
     }
 
-    pub fn eval(&mut self, opts: EvalOpts, path: impl AsRef<str>) -> Result<Option<Value>, Error> {
+    #[instrument(skip(self, opts))]
+    pub fn eval(&mut self, opts: &EvalOpts, uri: Uri) -> Result<Option<Value>, Error> {
         let request_id = self.gen_request_id();
-        let builder = CreateEvaluatorRequest::builder()
-            .request_id(request_id)
-            .allowed_modules(opts.allowed_modules)
-            .allowed_resources(opts.allowed_resources)
-            .output_format(opts.output_format);
-        let request = match opts.project {
-            Some(project) => builder.project(project).build(),
-            None => builder
-                .module_paths(vec![path.as_ref().to_string()])
-                .build(),
-        };
+        let module_paths = [uri.to_string()];
+
+        let mut request = CreateEvaluatorRequest::default();
+        request.request_id = request_id;
+        request.allowed_modules = Some(&opts.allowed_modules);
+        request.allowed_resources = Some(&opts.allowed_resources);
+        request.output_format = Some(&opts.output_format);
+
+        if opts.project.is_some() {
+            request.project = opts.project.as_ref();
+        } else {
+            request.module_paths = Some(&module_paths);
+        }
+
         let mut response = self.proto.create_evaluator_request(request)?;
 
         if let Some(message) = response.error.take() {
@@ -72,21 +78,23 @@ impl Evaluator {
             });
         }
 
-        let mut response = self.proto.evaluate_request(
-            EvaluateRequest::builder()
-                .request_id(request_id)
-                .evaluator_id(response.evaluator_id.unwrap_or_default())
-                .module_uri(format!("file://{}", path.as_ref()))
-                .expr("output.value".to_string())
-                .build(),
-        )?;
+        let mut request = EvaluateRequest::default();
+        request.request_id = request_id;
+        request.evaluator_id = response.evaluator_id.unwrap_or_default();
+        request.module_uri = uri;
+        request.expr = Some("output.value");
+
+        let mut response = self.proto.evaluate_request(request)?;
 
         if let Some(message) = response.error.take() {
             return Err(Error::Pkl(PklError::parse(message)));
         }
 
         match response.result {
-            Some(mut result) => Ok(Some(Decoder::new(Cursor::new(&mut result)).decode()?)),
+            Some(mut result) => {
+                let mut decoder = Decoder::new(Cursor::new(&mut result));
+                Ok(Some(decoder.decode()?))
+            }
             None => Ok(None),
         }
     }

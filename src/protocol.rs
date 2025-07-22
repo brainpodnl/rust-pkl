@@ -5,6 +5,7 @@ use std::{
 
 use rmp_serde::{Serializer, config::BytesMode};
 use serde::{Serialize, de::DeserializeOwned};
+use tracing::instrument;
 
 use crate::{
     client::{CreateEvaluatorRequest, EvaluateRequest},
@@ -29,7 +30,7 @@ impl Protocol {
             .arg("server")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .spawn()?;
         let stdin = child.stdin.take().ok_or(Error::Pipe)?;
         let stdout = child.stdout.take().ok_or(Error::Pipe)?;
@@ -41,6 +42,7 @@ impl Protocol {
         })
     }
 
+    #[instrument(skip_all, fields(id = request.request_id))]
     pub fn create_evaluator_request(
         &mut self,
         request: CreateEvaluatorRequest,
@@ -49,6 +51,7 @@ impl Protocol {
         Ok(self.recv()?)
     }
 
+    #[instrument(skip_all, fields(id = request.request_id))]
     pub fn evaluate_request(
         &mut self,
         request: EvaluateRequest,
@@ -57,6 +60,7 @@ impl Protocol {
         Ok(self.recv()?)
     }
 
+    #[instrument(skip_all, err(Debug))]
     fn recv<T>(&mut self) -> Result<T, Error>
     where
         T: Message + DeserializeOwned,
@@ -65,6 +69,7 @@ impl Protocol {
         Decoder::new(&mut self.stdout).decode_response_typed::<T>()
     }
 
+    #[instrument(skip_all, err(Debug))]
     fn send<M: Message + Serialize>(&mut self, message: M) -> Result<(), Error> {
         let mut serializer = Serializer::new(&mut self.stdin)
             .with_struct_map()
@@ -76,6 +81,7 @@ impl Protocol {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn close(mut self) -> Result<(), Error> {
         let _ = self.child.kill();
         Ok(())

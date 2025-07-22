@@ -1,5 +1,5 @@
 use crate::{
-    client::Project,
+    client::{Project, Uri},
     evaluator::{EvalOpts, Evaluator},
     protocol::Protocol,
 };
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     opts.project = Some(Project::from_path("example/")?);
 
-    let value = evaluator.eval(opts, "example/app.pkl")?;
+    let value = evaluator.eval(&opts, Uri::File("example/app.pkl".into()))?;
 
     println!("{:#?}", value);
 

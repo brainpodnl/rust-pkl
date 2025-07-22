@@ -5,6 +5,7 @@ use rmp::{
     decode::{MarkerReadError, RmpRead},
 };
 use serde::de::DeserializeOwned;
+use tracing::instrument;
 
 use crate::{
     errors::{Error, ValueError},
@@ -44,6 +45,7 @@ where
         Ok(String::from_utf8(buff)?)
     }
 
+    #[instrument(skip(self))]
     fn decode_property(&mut self) -> Result<(String, Value), ValueError> {
         let marker = self.marker()?;
 
@@ -64,6 +66,7 @@ where
         }
     }
 
+    #[instrument(skip(self))]
     fn decode_array(&mut self, n: usize) -> Result<Value, ValueError> {
         let mut array = Vec::with_capacity(n);
 
@@ -74,6 +77,7 @@ where
         Ok(Value::Array(array))
     }
 
+    #[instrument(skip(self))]
     fn decode_properties(&mut self, n: usize) -> Result<HashMap<String, Value>, ValueError> {
         let mut properties = HashMap::default();
 
@@ -85,6 +89,7 @@ where
         Ok(properties)
     }
 
+    #[instrument(skip(self))]
     fn decode_inner(&mut self, custom_type: bool) -> Result<Value, ValueError> {
         let marker = self.marker()?;
 
@@ -174,10 +179,12 @@ where
         }
     }
 
+    #[instrument(skip(self), err(Debug))]
     pub fn decode(&mut self) -> Result<Value, ValueError> {
         self.decode_inner(true)
     }
 
+    #[instrument(skip(self))]
     pub fn decode_response(&mut self) -> Result<Response, Error> {
         let marker = self.marker()?;
 

@@ -82,7 +82,7 @@ impl Evaluator {
         request.request_id = request_id;
         request.evaluator_id = response.evaluator_id.unwrap_or_default();
         request.module_uri = uri;
-        request.expr = Some("output.value");
+        request.expr = None;
 
         let mut response = self.proto.evaluate_request(request)?;
 
